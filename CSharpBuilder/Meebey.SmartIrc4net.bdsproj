@@ -100,7 +100,6 @@
       <File FileName="..\src\IrcClient\NonRfcChannelUser.cs" ContainerId="CSharpCompiler" ModuleName="NonRfcChannelUser"/>
       <File FileName="..\src\IrcClient\Channel.cs" ContainerId="CSharpCompiler" ModuleName="Channel"/>
       <File FileName="..\src\IrcClient\ChannelUser.cs" ContainerId="CSharpCompiler" ModuleName="ChannelUser"/>
-      <File FileName="..\src\IrcClient\Delegates.cs" ContainerId="CSharpCompiler" ModuleName="Delegates"/>
       <File FileName="..\src\IrcClient\EventArgs.cs" ContainerId="CSharpCompiler" ModuleName="EventArgs"/>
       <File FileName="..\src\IrcClient\IrcClient.cs" ContainerId="CSharpCompiler" ModuleName="IrcClient"/>
       <File FileName="..\src\IrcClient\IrcMessageData.cs" ContainerId="CSharpCompiler" ModuleName="IrcMessageData"/>
@@ -109,7 +108,6 @@
       <File FileName="..\src\IrcCommands\IrcCommands.cs" ContainerId="CSharpCompiler" ModuleName="IrcCommands"/>
       <File FileName="..\src\IrcCommands\Rfc2812.cs" ContainerId="CSharpCompiler" ModuleName="Rfc2812"/>
       <File FileName="..\src\IrcConnection\IrcTcpClient.cs" ContainerId="CSharpCompiler" ModuleName="IrcTcpClient"/>
-      <File FileName="..\src\IrcConnection\Delegates.cs" ContainerId="CSharpCompiler" ModuleName="Delegates"/>
       <File FileName="..\src\IrcConnection\EventArgs.cs" ContainerId="CSharpCompiler" ModuleName="EventArgs"/>
       <File FileName="..\src\IrcConnection\IrcConnection.cs" ContainerId="CSharpCompiler" ModuleName="IrcConnection"/>
     </FileList>

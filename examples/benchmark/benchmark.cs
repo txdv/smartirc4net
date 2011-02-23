@@ -99,7 +99,7 @@ public class Benchmark
     public static void IrcClientList()
     {
         IrcClient irc = new IrcClient();
-        irc.OnRawMessage += new IrcEventHandler(IrcClientListCallback);
+        irc.OnRawMessage += IrcClientListCallback;
         irc.Connect(SERVER, PORT);
         irc.Login(NICK, REALNAME);
         irc.RfcList(CHANNEL);
@@ -117,7 +117,7 @@ public class Benchmark
     public static void IrcConnectionList()
     {
         IrcConnection irc = new IrcConnection();
-        irc.OnReadLine += new ReadLineEventHandler(IrcConnectionListCallback);
+        irc.OnReadLine += IrcConnectionListCallback;
         irc.Connect(SERVER, PORT);
         irc.WriteLine(Rfc2812.Nick(NICK), Priority.Critical);
         irc.WriteLine(Rfc2812.User(NICK, 0, REALNAME), Priority.Critical);

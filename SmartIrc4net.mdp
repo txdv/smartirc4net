@@ -20,13 +20,11 @@
     <File subtype="Code" buildaction="Compile" name="src/EventArgs.cs" />
     <File subtype="Code" buildaction="Compile" name="src/Exceptions.cs" />
     <File subtype="Code" buildaction="Compile" name="src/IrcConnection/IrcConnection.cs" />
-    <File subtype="Code" buildaction="Compile" name="src/IrcConnection/Delegates.cs" />
     <File subtype="Code" buildaction="Compile" name="src/IrcConnection/EventArgs.cs" />
     <File subtype="Code" buildaction="Compile" name="src/IrcCommands/IrcCommands.cs" />
     <File subtype="Code" buildaction="Compile" name="src/IrcCommands/Rfc2812.cs" />
     <File subtype="Code" buildaction="Compile" name="src/IrcClient/IrcClient.cs" />
     <File subtype="Code" buildaction="Compile" name="src/IrcClient/IrcMessageData.cs" />
-    <File subtype="Code" buildaction="Compile" name="src/IrcClient/Delegates.cs" />
     <File subtype="Code" buildaction="Compile" name="src/IrcClient/EventArgs.cs" />
     <File subtype="Code" buildaction="Compile" name="src/IrcClient/IrcUser.cs" />
     <File subtype="Code" buildaction="Compile" name="src/IrcClient/Channel.cs" />

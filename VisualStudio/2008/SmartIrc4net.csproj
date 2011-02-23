@@ -128,10 +128,6 @@
       <Link>IrcClient\ChannelUser.cs</Link>
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="..\..\src\IrcClient\Delegates.cs">
-      <Link>IrcClient\Delegates.cs</Link>
-      <SubType>Code</SubType>
-    </Compile>
     <Compile Include="..\..\src\IrcClient\EventArgs.cs">
       <Link>IrcClient\EventArgs.cs</Link>
       <SubType>Code</SubType>
@@ -165,10 +161,6 @@
     </Compile>
     <Compile Include="..\..\src\IrcCommands\Rfc2812.cs">
       <Link>IrcCommands\Rfc2812.cs</Link>
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="..\..\src\IrcConnection\Delegates.cs">
-      <Link>IrcConnection\Delegates.cs</Link>
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="..\..\src\IrcConnection\EventArgs.cs">

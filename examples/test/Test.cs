@@ -126,9 +126,9 @@ public class Test
         
         // here we connect the events of the API to our written methods
         // most have own event handler types, because they ship different data
-        irc.OnQueryMessage += new IrcEventHandler(OnQueryMessage);
-        irc.OnError += new ErrorEventHandler(OnError);
-        irc.OnRawMessage += new IrcEventHandler(OnRawMessage);
+        irc.OnQueryMessage += OnQueryMessage;
+        irc.OnError += OnError;
+        irc.OnRawMessage += OnRawMessage;
 
         string[] serverlist;
         // the server we want to connect to, could be also a simple string

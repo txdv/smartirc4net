@@ -121,12 +121,6 @@
                     BuildAction = "Compile"
                 />
                 <File
-                    RelPath = "IrcClient\Delegates.cs"
-                    Link = "..\..\src\IrcClient\Delegates.cs"
-                    SubType = "Code"
-                    BuildAction = "Compile"
-                />
-                <File
                     RelPath = "IrcClient\EventArgs.cs"
                     Link = "..\..\src\IrcClient\EventArgs.cs"
                     SubType = "Code"
@@ -171,12 +165,6 @@
                 <File
                     RelPath = "IrcCommands\Rfc2812.cs"
                     Link = "..\..\src\IrcCommands\Rfc2812.cs"
-                    SubType = "Code"
-                    BuildAction = "Compile"
-                />
-                <File
-                    RelPath = "IrcConnection\Delegates.cs"
-                    Link = "..\..\src\IrcConnection\Delegates.cs"
                     SubType = "Code"
                     BuildAction = "Compile"
                 />
