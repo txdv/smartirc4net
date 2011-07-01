@@ -61,7 +61,7 @@ namespace Meebey.SmartIrc4net
         /// To handle more or less CTCP Events, modify this collection to your needs.
         /// You can also change the Delegates to your own implementations.
         /// </summary>
-        public Dictionary<string, CtcpDelegate> CtcpDelegates {
+        public Dictionary<string, Action<CtcpEventArgs>> CtcpDelegates {
             get {
                 return _CtcpDelegates;
             }
@@ -110,7 +110,7 @@ namespace Meebey.SmartIrc4net
         #region private variables
         private IPAddress _ExternalIpAdress;
         private List<DccConnection> _DccConnections = new List<DccConnection>();
-        private Dictionary<string, CtcpDelegate>  _CtcpDelegates = new Dictionary<string, CtcpDelegate>(StringComparer.CurrentCultureIgnoreCase);
+        private Dictionary<string, Action<CtcpEventArgs>>  _CtcpDelegates = new Dictionary<string, Action<CtcpEventArgs>>(StringComparer.CurrentCultureIgnoreCase);
         private string _CtcpUserInfo;
         private string _CtcpUrl;
         private string _CtcpSource;
@@ -311,7 +311,7 @@ namespace Meebey.SmartIrc4net
         private void CtcpClientInfoDelegate(CtcpEventArgs e)
         {
             string clientInfo = "CLIENTINFO";
-            foreach(KeyValuePair<string, CtcpDelegate> kvp in _CtcpDelegates) {
+            foreach(KeyValuePair<string, Action<CtcpEventArgs>> kvp in _CtcpDelegates) {
                 clientInfo = clientInfo+" "+kvp.Key.ToUpper();
             }
             SendMessage(SendType.CtcpReply, e.Data.Nick, clientInfo);

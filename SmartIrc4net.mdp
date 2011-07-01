@@ -38,7 +38,6 @@
     <File subtype="Code" buildaction="Compile" name="src/IrcFeatures/DccChat.cs" />
     <File subtype="Code" buildaction="Compile" name="src/IrcFeatures/DccConnection.cs" />
     <File subtype="Code" buildaction="Compile" name="src/IrcFeatures/DccSend.cs" />
-    <File subtype="Code" buildaction="Compile" name="src/IrcFeatures/Delegates.cs" />
     <File subtype="Code" buildaction="Compile" name="src/IrcFeatures/EventArgs.cs" />
     <File subtype="Code" buildaction="Compile" name="src/IrcFeatures/IrcConstants.cs" />
     <File subtype="Code" buildaction="Compile" name="src/IrcFeatures/IrcFeatures.cs" />
