@@ -30,6 +30,8 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
+using Manos.IO;
+
 namespace Meebey.SmartIrc4net
 {
     /// <summary>
@@ -38,6 +40,11 @@ namespace Meebey.SmartIrc4net
     /// <threadsafety static="true" instance="true" />
     public class IrcCommands : IrcConnection
     {
+        public IrcCommands(Context context, Socket socket)
+            : base(context, socket)
+        {
+        }
+
         private int _MaxModeChanges = 3;
         
         protected int MaxModeChanges {

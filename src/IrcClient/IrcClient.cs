@@ -35,6 +35,8 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 
+using Manos.IO;
+
 namespace Meebey.SmartIrc4net
 {
     /// <summary>
@@ -417,7 +419,8 @@ namespace Meebey.SmartIrc4net
         /// <summary>
         /// This class manages the connection server and provides access to all the objects needed to send and receive messages.
         /// </summary>
-        public IrcClient()
+        public IrcClient(Context context, Socket socket)
+            : base(context, socket)
         {
 #if LOG4NET
             Logger.Main.Debug("IrcClient created");
@@ -439,10 +442,10 @@ namespace Meebey.SmartIrc4net
         /// </summary>
         /// <param name="addresslist">The list of server hostnames.</param>
         /// <param name="port">The TCP port the server listens on.</param>
-        public new void Connect(string[] addresslist, int port)
+        public new void Connect(string addresslist, int port, Action action)
         {
             _SupportNonRfcLocked = true;
-            base.Connect(addresslist, port);
+            base.Connect(addresslist, port, action);
         }
         
         /// <overloads>

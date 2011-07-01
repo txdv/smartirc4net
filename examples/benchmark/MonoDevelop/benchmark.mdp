@@ -1,4 +1,4 @@
-<Project name="Benchmark" fileversion="2.0" DefaultNamespace="Benchmark" language="C#" clr-version="Net_2_0" targetFramework="3.5" ctype="DotNetProject">
+<Project name="Benchmark" fileversion="2.0" DefaultNamespace="Benchmark" language="C#" clr-version="Net_2_0" targetFramework="4.0" ctype="DotNetProject">
   <Configurations active="Debug">
     <Configuration name="Debug" ctype="DotNetProjectConfiguration">
       <Output directory="../../../bin/mono/debug" assembly="benchmark" />
@@ -19,7 +19,7 @@
   </Contents>
   <References>
     <ProjectReference type="Project" localcopy="True" refto="SmartIrc4net" />
-    <ProjectReference type="Gac" localcopy="True" refto="System, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089" />
+    <ProjectReference type="Gac" localcopy="True" refto="System, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089" />
   </References>
   <LanguageParameters ApplicationIcon="." ctype="CSharpProjectParameters" />
   <DeploymentInformation strategy="File" />
