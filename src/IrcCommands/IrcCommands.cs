@@ -29,6 +29,9 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+#if MANOS
+using Manos.IO;
+#endif
 
 namespace Meebey.SmartIrc4net
 {
@@ -48,12 +51,22 @@ namespace Meebey.SmartIrc4net
                 _MaxModeChanges = value;
             }
         }
+#if MANOS
+
+        public IrcCommands(Context context)
+            : base(context)
+        {
+        }
+
+#else
 
 #if LOG4NET
         public IrcCommands()
         {
             Logger.Main.Debug("IrcCommands created");
         }
+#endif
+
 #endif
         
 #if LOG4NET

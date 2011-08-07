@@ -34,6 +34,9 @@ using System.Threading;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Specialized;
+#if MANOS
+using Manos.IO;
+#endif
 
 namespace Meebey.SmartIrc4net
 {
@@ -413,11 +416,16 @@ namespace Meebey.SmartIrc4net
                 return _BanListSyncRoot;
             }
         }
-        
+
         /// <summary>
         /// This class manages the connection server and provides access to all the objects needed to send and receive messages.
         /// </summary>
+#if MANOS
+        public IrcClient(Context context)
+            : base(context)
+#else
         public IrcClient()
+#endif
         {
 #if LOG4NET
             Logger.Main.Debug("IrcClient created");

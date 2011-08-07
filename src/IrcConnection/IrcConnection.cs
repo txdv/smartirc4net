@@ -29,16 +29,21 @@
 
 using System;
 using System.Collections;
-using System.IO;
-using System.Net;
-using System.Net.Security;
-using System.Net.Sockets;
+using System.Collections.Generic;
 using System.Reflection;
 using System.Text;
+using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
 using System.Security.Authentication;
 using System.Threading;
+#if MANOS
+using Manos.IO;
+#else
+using System.Net;
+using System.Net.Sockets;
+using System.IO;
 using Starksoft.Net.Proxy;
+#endif
 
 namespace Meebey.SmartIrc4net
 {
@@ -56,13 +61,6 @@ namespace Meebey.SmartIrc4net
         private bool             _UseSsl;
         private bool             _ValidateServerCertificate;
         private X509Certificate  _SslClientCertificate;
-        private StreamReader     _Reader;
-        private StreamWriter     _Writer;
-        private ReadThread       _ReadThread;
-        private WriteThread      _WriteThread;
-        private IdleWorkerThread _IdleWorkerThread;
-        private TcpClient        _TcpClient;
-        private Hashtable        _SendBuffer = Hashtable.Synchronized(new Hashtable());
         private int              _SendDelay = 200;
         private bool             _IsRegistered;
         private bool             _IsConnected;
@@ -84,10 +82,21 @@ namespace Meebey.SmartIrc4net
         private TimeSpan         _Lag;
         private string           _ProxyHost;
         private int              _ProxyPort;
+#if MANOS
+        private static readonly byte[] crlf = new byte[] { (byte)'\r', (byte)'\n' };
+        private ByteBufferCollection collection = new ByteBufferCollection();
+#else
+        private TcpClient        _TcpClient;
+        private StreamReader     _Reader;
+        private StreamWriter     _Writer;
+        private ReadThread       _ReadThread;
+        private WriteThread      _WriteThread;
+        private IdleWorkerThread _IdleWorkerThread;
+
         private ProxyType        _ProxyType = ProxyType.None;
         private string           _ProxyUsername;
         private string           _ProxyPassword;
-        
+#endif
         /// <event cref="OnReadLine">
         /// Raised when a \r\n terminated line is read from the socket
         /// </event>
@@ -263,20 +272,6 @@ namespace Meebey.SmartIrc4net
         }
 
         /// <summary>
-        /// To prevent flooding the IRC server, it's required to delay each
-        /// message, given in milliseconds.
-        /// Default: 200
-        /// </summary>
-        public int SendDelay {
-            get {
-                return _SendDelay;
-            }
-            set {
-                _SendDelay = value;
-            }
-        }
-
-        /// <summary>
         /// On successful registration on the IRC network, this is set to true.
         /// </summary>
         public bool IsRegistered {
@@ -443,7 +438,50 @@ namespace Meebey.SmartIrc4net
             }
         }
 
-        
+        private IDictionary<Priority, Queue<string>> SendBuffer { get; set; }
+
+#if MANOS
+        public Context Context { get; protected set; }
+
+        private ITimerWatcher SendMessageWatcher { get; set; }
+        private ITcpSocket    Socket             { get; set; }
+
+        /// <summary>
+        /// To prevent flooding the IRC server, it's required to delay each
+        /// message, given in milliseconds.
+        /// Default: 200
+        /// </summary>
+        public int SendDelay {
+            get {
+                return _SendDelay;
+            }
+            set {
+                _SendDelay = (value < 0 ? 0 : value);
+                StopSendMessageWatcher();
+                if (_SendDelay == 0) {
+                    // We have to flush the entire buffer to the socket
+                    // since the SendMessageWatcher is turned off
+                    FlushSendBuffer();
+                } else {
+                    StartSendMessageWatcher(_SendDelay);
+                }
+            }
+        }
+#else
+        /// <summary>
+        /// To prevent flooding the IRC server, it's required to delay each
+        /// message, given in milliseconds.
+        /// Default: 200
+        /// </summary>
+        public int SendDelay {
+            get {
+                return _SendDelay;
+            }
+            set {
+                _SendDelay = value;
+            }
+        }
+
         /// <summary>
         /// If you want to use a Proxy, set the ProxyHost to Host of the Proxy you want to use.
         /// </summary>
@@ -481,7 +519,8 @@ namespace Meebey.SmartIrc4net
                 _ProxyType = value;
             }
         }
-        
+
+
         /// <summary>
         /// Username to your Proxy Server
         /// </summary>
@@ -505,7 +544,266 @@ namespace Meebey.SmartIrc4net
                 _ProxyPassword = value;
             }
         }
-        
+
+#endif
+
+        private void InitSendBuffer()
+        {
+            SendBuffer = new Dictionary<Priority, Queue<string>>();
+            foreach (Priority priority in Enum.GetValues(typeof(Priority))) {
+                SendBuffer[priority] = new Queue<string>();
+            }
+        }
+
+#if MANOS
+
+        private void StartSendMessageWatcher()
+        {
+            StartSendMessageWatcher(SendDelay);
+        }
+
+        private void StartSendMessageWatcher(int delay)
+        {
+            if (delay == 0) {
+                SendMessageWatcher = null;
+            } else {
+                SendMessageWatcher = Context.CreateTimerWatcher(TimeSpan.Zero, TimeSpan.FromMilliseconds(SendDelay), SendMessage);
+                SendMessageWatcher.Start();
+            }
+        }
+
+        private void StopSendMessageWatcher()
+        {
+            if (SendMessageWatcher != null) {
+                if (SendMessageWatcher.IsRunning) {
+                    SendMessageWatcher.Stop();
+                }
+                SendMessageWatcher = null;
+            }
+        }
+
+        private void SendMessage()
+        {
+            foreach (var kvp in SendBuffer) {
+                var queue = kvp.Value;
+                if (queue.Count > 0) {
+                    BaseWrite(queue.Dequeue());
+                    break;
+                }
+            }
+        }
+
+        private void FlushSendBuffer()
+        {
+            foreach (var kvp in SendBuffer) {
+                var queue = kvp.Value;
+                while (queue.Count > 0) {
+                    BaseWrite(queue.Dequeue());
+                }
+            }
+        }
+
+        private void Write(string data)
+        {
+            Write(Encoding.GetBytes(data));
+        }
+
+        private void Write(string data, Action action)
+        {
+            Write(Encoding.GetBytes(data), action);
+        }
+
+        private void Write(byte[] data)
+        {
+            if (Socket != null) {
+                Socket.GetSocketStream().Write(data);
+            }
+        }
+
+        private void Write(byte[] data, Action action)
+        {
+            CallbackCollection callbacks = new CallbackCollection();
+            callbacks.Add(data, action);
+            Write(callbacks);
+        }
+
+        private void Write(ByteBuffer data)
+        {
+            if (Socket != null) {
+                Socket.GetSocketStream().Write(data);
+            }
+        }
+
+        private void Write(IEnumerable<ByteBuffer> data)
+        {
+            if (Socket != null) {
+                Socket.GetSocketStream().Write(data);
+            }
+        }
+
+        private void EnqueueData(string data, Priority priority)
+        {
+            if (SendMessageWatcher == null) {
+                BaseWrite(data);
+            } else {
+                SendBuffer[priority].Enqueue(data);
+            }
+        }
+
+        public IrcConnection(Context context)
+        {
+            Context = context;
+
+#if LOG4NET
+            Logger.Init();
+            Logger.Main.Debug("IrcConnection created");
+#endif
+            InitSendBuffer();
+
+            OnReadLine        += new ReadLineEventHandler(_SimpleParser);
+            OnConnectionError += new EventHandler(_OnConnectionError);
+
+            Assembly assembly = Assembly.GetAssembly(this.GetType());
+            AssemblyName assemblyName = assembly.GetName(false);
+
+            AssemblyProductAttribute pr = (AssemblyProductAttribute)assembly.GetCustomAttributes(typeof(AssemblyProductAttribute), false)[0];
+
+            _VersionNumber = assemblyName.Version.ToString();
+            _VersionString = pr.Product + " " + _VersionNumber;
+        }
+
+        public void Connect(string[] addresslist, int port, Action callback = null)
+        {
+            if (_IsConnected) {
+                throw new AlreadyConnectedException("Already connected to: " + Address + ":" + Port);
+            }
+
+            _AutoRetryAttempt++;
+#if LOG4NET
+            Logger.Connection.Info(String.Format("connecting... (attempt: {0})",
+                                                 _AutoRetryAttempt));
+#endif
+
+            _AddressList = (string[])addresslist.Clone();
+            _Port = port;
+
+            if (OnConnecting != null) {
+                OnConnecting(this, EventArgs.Empty);
+            }
+
+            if (Socket != null) {
+                Disconnect();
+            }
+
+            Socket = Context.CreateTcpSocket(AddressFamily.InterNetwork);
+
+            Socket.Connect(new IPEndPoint(IPAddress.Parse(Address), Port), delegate {
+
+                _IsConnected = true;
+
+                if (OnConnected != null) {
+                    OnConnected(this, EventArgs.Empty);
+                }
+
+                if (callback != null) {
+                    callback();
+                }
+
+                if (Socket != null) {
+                    var stream = Socket.GetSocketStream();
+                    stream.ResumeWriting();
+                    stream.Read(OnRead, delegate (Exception exception) {
+                        if (AutoReconnect) {
+                            Reconnect();
+                        } else {
+                            Disconnect();
+                        }
+                    }, delegate {
+                        // TODO: do something
+                    });
+
+                    StartSendMessageWatcher();
+                }
+
+            }, delegate (Exception exception) {
+                // TODO: do something
+            });
+        }
+
+        public void Reconnect()
+        {
+            Reconnect(null);
+        }
+
+        public void Reconnect(Action callback)
+        {
+#if LOG4NET
+            Logger.Connection.Info("reconnecting...");
+#endif
+            Disconnect();
+            Connect(_AddressList, Port, callback);
+        }
+
+        private void OnRead(ByteBuffer buffer)
+        {
+            collection.AddCopy(buffer);
+            int res = -1;
+
+            while ((res = collection.FirstBytes(crlf)) != -1) {
+                var bytes = new byte[res];
+                collection.CopyTo(bytes, res);
+                collection.Skip(res + crlf.Length);
+                string line = Encoding.GetString(bytes);
+
+                if (OnReadLine != null) {
+                    OnReadLine(this, new ReadLineEventArgs(line));
+                }
+            }
+        }
+
+        public void BaseWrite(string data)
+        {
+            Write(data, delegate {
+                if (OnWriteLine != null) {
+                    OnWriteLine(this, new WriteLineEventArgs(data));
+                }
+            });
+        }
+
+        public void Disconnect()
+        {
+            if (!IsConnected) {
+                throw new NotConnectedException("The connection could not be disconnected because there is no active connection");
+            }
+
+#if LOG4NET
+            Logger.Connection.Info("disconnecting...");
+#endif
+            if (OnDisconnecting != null) {
+                OnDisconnecting(this, EventArgs.Empty);
+            }
+
+            StopSendMessageWatcher();
+
+            if (Socket != null) {
+                Socket.Close();
+                Socket = null;
+            }
+
+            _IsConnected = false;
+            _IsRegistered = false;
+
+            if (OnDisconnected != null) {
+                OnDisconnected(this, EventArgs.Empty);
+            }
+
+#if LOG4NET
+            Logger.Connection.Info("disconnected");
+#endif
+        }
+
+#else
+
         /// <summary>
         /// Initializes the message queues, read and write thread
         /// </summary>
@@ -515,11 +813,7 @@ namespace Meebey.SmartIrc4net
             Logger.Init();
             Logger.Main.Debug("IrcConnection created");
 #endif
-            _SendBuffer[Priority.High]        = Queue.Synchronized(new Queue());
-            _SendBuffer[Priority.AboveMedium] = Queue.Synchronized(new Queue());
-            _SendBuffer[Priority.Medium]      = Queue.Synchronized(new Queue());
-            _SendBuffer[Priority.BelowMedium] = Queue.Synchronized(new Queue());
-            _SendBuffer[Priority.Low]         = Queue.Synchronized(new Queue());
+            InitSendBuffer();
 
             // setup own callbacks
             OnReadLine        += new ReadLineEventHandler(_SimpleParser);
@@ -529,22 +823,16 @@ namespace Meebey.SmartIrc4net
             _WriteThread = new WriteThread(this);
             _IdleWorkerThread = new IdleWorkerThread(this);
 
-            Assembly assm = Assembly.GetAssembly(this.GetType());
-            AssemblyName assm_name = assm.GetName(false);
+            Assembly assembly = Assembly.GetAssembly(this.GetType());
+            AssemblyName assemblyName = assembly.GetName(false);
 
-            AssemblyProductAttribute pr = (AssemblyProductAttribute)assm.GetCustomAttributes(typeof(AssemblyProductAttribute), false)[0];
+            AssemblyProductAttribute pr = (AssemblyProductAttribute)assembly.GetCustomAttributes(typeof(AssemblyProductAttribute), false)[0];
 
-            _VersionNumber = assm_name.Version.ToString();
-            _VersionString = pr.Product+" "+_VersionNumber;
+            _VersionNumber = assemblyName.Version.ToString();
+            _VersionString = pr.Product + " " + _VersionNumber;
         }
-        
-#if LOG4NET
-        ~IrcConnection()
-        {
-            Logger.Main.Debug("IrcConnection destroyed");
-        }
-#endif
-        
+
+
         /// <overloads>this method has 2 overloads</overloads>
         /// <summary>
         /// Connects to the specified server and port, when the connection fails
@@ -586,11 +874,11 @@ namespace Meebey.SmartIrc4net
                     IProxyClient proxyClient = null;
                     ProxyClientFactory proxyFactory = new ProxyClientFactory();
                     // HACK: map our ProxyType to Starksoft's ProxyType
-                    Starksoft.Net.Proxy.ProxyType proxyType = 
+                    Starksoft.Net.Proxy.ProxyType proxyType =
                         (Starksoft.Net.Proxy.ProxyType) Enum.Parse(
                             typeof(ProxyType), _ProxyType.ToString(), true
                         );
-                    
+
                     if (_ProxyUsername == null && _ProxyPassword == null) {
                         proxyClient = proxyFactory.CreateProxyClient(
                             proxyType
@@ -604,7 +892,7 @@ namespace Meebey.SmartIrc4net
                             _ProxyPassword
                         );
                     }
-                    
+
                     _TcpClient.Connect(_ProxyHost, _ProxyPort);
                     proxyClient.TcpClient = _TcpClient;
                     proxyClient.CreateConnection(ip.ToString(), port);
@@ -681,7 +969,7 @@ namespace Meebey.SmartIrc4net
                 _ReadThread.Start();
                 _WriteThread.Start();
                 _IdleWorkerThread.Start();
-                
+
 #if LOG4NET
                 Logger.Connection.Info("connected");
 #endif
@@ -740,14 +1028,119 @@ namespace Meebey.SmartIrc4net
             }
         }
 
-        /// <summary>
-        /// Connects to the specified server and port.
-        /// </summary>
-        /// <param name="address">Server address to connect to</param>
-        /// <param name="port">Port number to connect to</param>
-        public void Connect(string address, int port)
+
+        private bool BaseWrite(string data)
         {
-            Connect(new string[] { address }, port);
+            if (IsConnected) {
+                try {
+                    _Writer.Write(data + "\r\n");
+                    _Writer.Flush();
+                } catch (IOException) {
+#if LOG4NET
+                    Logger.Socket.Warn("sending data failed, connection lost");
+#endif
+                    IsConnectionError = true;
+                    return false;
+                } catch (ObjectDisposedException) {
+#if LOG4NET
+                    Logger.Socket.Warn("sending data failed (stream error), connection lost");
+#endif
+                    IsConnectionError = true;
+                    return false;
+                }
+
+#if LOG4NET
+                Logger.Socket.Debug("sent: \""+data+"\"");
+#endif
+                if (OnWriteLine != null) {
+                    OnWriteLine(this, new WriteLineEventArgs(data));
+                }
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        ///
+        /// </summary>
+        /// <param name="blocking"></param>
+        public void Listen(bool blocking)
+        {
+            if (blocking) {
+                while (IsConnected) {
+                    ReadLine(true);
+                }
+            } else {
+                while (ReadLine(false).Length > 0) {
+                    // loop as long as we receive messages
+                }
+            }
+        }
+
+        /// <summary>
+        ///
+        /// </summary>
+        public void Listen()
+        {
+            Listen(true);
+        }
+
+        /// <summary>
+        ///
+        /// </summary>
+        /// <param name="blocking"></param>
+        public void ListenOnce(bool blocking)
+        {
+            ReadLine(blocking);
+        }
+
+        /// <summary>
+        ///
+        /// </summary>
+        public void ListenOnce()
+        {
+            ListenOnce(true);
+        }
+
+        /// <summary>
+        ///
+        /// </summary>
+        /// <param name="blocking"></param>
+        /// <returns></returns>
+        public string ReadLine(bool blocking)
+        {
+            string data = "";
+            if (blocking) {
+                // block till the queue has data, but bail out on connection error
+                while (IsConnected &&
+                       !IsConnectionError &&
+                       _ReadThread.Queue.Count == 0) {
+                    Thread.Sleep(10);
+                }
+            }
+
+            if (IsConnected &&
+                _ReadThread.Queue.Count > 0) {
+                data = (string)(_ReadThread.Queue.Dequeue());
+            }
+
+            if (data != null && data.Length > 0) {
+#if LOG4NET
+                Logger.Queue.Debug("read: \""+data+"\"");
+#endif
+                if (OnReadLine != null) {
+                    OnReadLine(this, new ReadLineEventArgs(data));
+                }
+            }
+
+            if (IsConnectionError &&
+                !IsDisconnecting &&
+                OnConnectionError != null) {
+                OnConnectionError(this, EventArgs.Empty);
+            }
+
+            return data;
         }
 
         /// <summary>
@@ -770,7 +1163,7 @@ namespace Meebey.SmartIrc4net
             Disconnect();
             Connect(_AddressList, _Port);
         }
-        
+
         /// <summary>
         /// Disconnects from the server
         /// </summary>
@@ -809,86 +1202,27 @@ namespace Meebey.SmartIrc4net
 #endif
         }
 
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="blocking"></param>
-        public void Listen(bool blocking)
+        private void EnqueueData(string data, Priority priority)
         {
-            if (blocking) {
-                while (IsConnected) {
-                    ReadLine(true);
-                }
-            } else {
-                while (ReadLine(false).Length > 0) {
-                    // loop as long as we receive messages
-                }
-            }
+            SendBuffer[priority].Enqueue(data);
         }
-
-        /// <summary>
-        /// 
-        /// </summary>
-        public void Listen()
-        {
-            Listen(true);
-        }
-        
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="blocking"></param>
-        public void ListenOnce(bool blocking)
-        {
-            ReadLine(blocking);
-        }
-
-        /// <summary>
-        /// 
-        /// </summary>
-        public void ListenOnce()
-        {
-            ListenOnce(true);
-        }
-
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="blocking"></param>
-        /// <returns></returns>
-        public string ReadLine(bool blocking)
-        {
-            string data = "";
-            if (blocking) {
-                // block till the queue has data, but bail out on connection error
-                while (IsConnected &&
-                       !IsConnectionError &&
-                       _ReadThread.Queue.Count == 0) {
-                    Thread.Sleep(10);
-                }
-            }
-
-            if (IsConnected &&
-                _ReadThread.Queue.Count > 0) {
-                data = (string)(_ReadThread.Queue.Dequeue());
-            }
-
-            if (data != null && data.Length > 0) {
-#if LOG4NET
-                Logger.Queue.Debug("read: \""+data+"\"");
 #endif
-                if (OnReadLine != null) {
-                    OnReadLine(this, new ReadLineEventArgs(data));
-                }
-            }
+        
+#if LOG4NET
+        ~IrcConnection()
+        {
+            Logger.Main.Debug("IrcConnection destroyed");
+        }
+#endif
 
-            if (IsConnectionError &&
-                !IsDisconnecting &&
-                OnConnectionError != null) {
-                OnConnectionError(this, EventArgs.Empty);
-            }
-            
-            return data;
+        /// <summary>
+        /// Connects to the specified server and port.
+        /// </summary>
+        /// <param name="address">Server address to connect to</param>
+        /// <param name="port">Port number to connect to</param>
+        public void Connect(string address, int port)
+        {
+            Connect(new string[] { address }, port);
         }
 
         /// <summary>
@@ -898,14 +1232,16 @@ namespace Meebey.SmartIrc4net
         /// <param name="priority"></param>
         public void WriteLine(string data, Priority priority)
         {
+            data += "\r\n";
+
             if (priority == Priority.Critical) {
                 if (!IsConnected) {
                     throw new NotConnectedException();
                 }
                 
-                _WriteLine(data);
+                BaseWrite(data);
             } else {
-                ((Queue)_SendBuffer[priority]).Enqueue(data);
+                EnqueueData(data, priority);
             }
         }
 
@@ -916,38 +1252,6 @@ namespace Meebey.SmartIrc4net
         public void WriteLine(string data)
         {
             WriteLine(data, Priority.Medium);
-        }
-
-        private bool _WriteLine(string data)
-        {
-            if (IsConnected) {
-                try {
-                    _Writer.Write(data + "\r\n");
-                    _Writer.Flush();
-                } catch (IOException) {
-#if LOG4NET
-                    Logger.Socket.Warn("sending data failed, connection lost");
-#endif
-                    IsConnectionError = true;
-                    return false;
-                } catch (ObjectDisposedException) {
-#if LOG4NET
-                    Logger.Socket.Warn("sending data failed (stream error), connection lost");
-#endif
-                    IsConnectionError = true;
-                    return false;
-                }
-
-#if LOG4NET
-                Logger.Socket.Debug("sent: \""+data+"\"");
-#endif
-                if (OnWriteLine != null) {
-                    OnWriteLine(this, new WriteLineEventArgs(data));
-                }
-                return true;
-            }
-
-            return false;
         }
 
         private void _NextAddress()
@@ -1022,7 +1326,9 @@ namespace Meebey.SmartIrc4net
             } catch (ConnectionException) {
             }
         }
-        
+
+#if !MANOS
+
         /// <summary>
         /// 
         /// </summary>
@@ -1233,44 +1539,46 @@ namespace Meebey.SmartIrc4net
             // WARNING: complex scheduler, don't even think about changing it!
             private void _CheckBuffer()
             {
-                // only send data if we are succefully registered on the IRC network
-                if (!_Connection._IsRegistered) {
-                    return;
-                }
+                lock (_Connection.SendBuffer) {
+                    // only send data if we are succefully registered on the IRC network
+                    if (!_Connection._IsRegistered) {
+                        return;
+                    }
 
-                _HighCount        = ((Queue)_Connection._SendBuffer[Priority.High]).Count;
-                _AboveMediumCount = ((Queue)_Connection._SendBuffer[Priority.AboveMedium]).Count;
-                _MediumCount      = ((Queue)_Connection._SendBuffer[Priority.Medium]).Count;
-                _BelowMediumCount = ((Queue)_Connection._SendBuffer[Priority.BelowMedium]).Count;
-                _LowCount         = ((Queue)_Connection._SendBuffer[Priority.Low]).Count;
+                    _HighCount        = _Connection.SendBuffer[Priority.High].Count;
+                    _AboveMediumCount = _Connection.SendBuffer[Priority.AboveMedium].Count;
+                    _MediumCount      = _Connection.SendBuffer[Priority.Medium].Count;
+                    _BelowMediumCount = _Connection.SendBuffer[Priority.BelowMedium].Count;
+                    _LowCount         = _Connection.SendBuffer[Priority.Low].Count;
 
-                if (_CheckHighBuffer() &&
-                    _CheckAboveMediumBuffer() &&
-                    _CheckMediumBuffer() &&
-                    _CheckBelowMediumBuffer() &&
-                    _CheckLowBuffer()) {
-                    // everything is sent, resetting all counters
-                    _AboveMediumSentCount = 0;
-                    _MediumSentCount      = 0;
-                    _BelowMediumSentCount = 0;
-                    _BurstCount = 0;
-                }
+                    if (_CheckHighBuffer() &&
+                        _CheckAboveMediumBuffer() &&
+                        _CheckMediumBuffer() &&
+                        _CheckBelowMediumBuffer() &&
+                        _CheckLowBuffer()) {
+                        // everything is sent, resetting all counters
+                        _AboveMediumSentCount = 0;
+                        _MediumSentCount      = 0;
+                        _BelowMediumSentCount = 0;
+                        _BurstCount = 0;
+                    }
 
-                if (_BurstCount < 3) {
-                    _BurstCount++;
-                    //_CheckBuffer();
+                    if (_BurstCount < 3) {
+                        _BurstCount++;
+                        //_CheckBuffer();
+                    }
                 }
             }
 
             private bool _CheckHighBuffer()
             {
                 if (_HighCount > 0) {
-                    string data = (string)((Queue)_Connection._SendBuffer[Priority.High]).Dequeue();
-                    if (_Connection._WriteLine(data) == false) {
+                    string data = _Connection.SendBuffer[Priority.High].Peek();
+                    if (!_Connection.BaseWrite(data)) {
 #if LOG4NET
                         Logger.Queue.Warn("Sending data was not sucessful, data is requeued!");
 #endif
-                        ((Queue)_Connection._SendBuffer[Priority.High]).Enqueue(data);
+                        _Connection.SendBuffer[Priority.High].Dequeue();
                     }
 
                     if (_HighCount > 1) {
@@ -1286,12 +1594,12 @@ namespace Meebey.SmartIrc4net
             {
                 if ((_AboveMediumCount > 0) &&
                     (_AboveMediumSentCount < _AboveMediumThresholdCount)) {
-                    string data = (string)((Queue)_Connection._SendBuffer[Priority.AboveMedium]).Dequeue();
-                    if (_Connection._WriteLine(data) == false) {
+                    string data = _Connection.SendBuffer[Priority.AboveMedium].Peek();
+                    if (!_Connection.BaseWrite(data)) {
 #if LOG4NET
                         Logger.Queue.Warn("Sending data was not sucessful, data is requeued!");
 #endif
-                        ((Queue)_Connection._SendBuffer[Priority.AboveMedium]).Enqueue(data);
+                        _Connection.SendBuffer[Priority.AboveMedium].Dequeue();
                     }
                     _AboveMediumSentCount++;
 
@@ -1307,12 +1615,12 @@ namespace Meebey.SmartIrc4net
             {
                 if ((_MediumCount > 0) &&
                     (_MediumSentCount < _MediumThresholdCount)) {
-                    string data = (string)((Queue)_Connection._SendBuffer[Priority.Medium]).Dequeue();
-                    if (_Connection._WriteLine(data) == false) {
+                    string data = _Connection.SendBuffer[Priority.Medium].Peek();
+                    if (!_Connection.BaseWrite(data)) {
 #if LOG4NET
                         Logger.Queue.Warn("Sending data was not sucessful, data is requeued!");
 #endif
-                        ((Queue)_Connection._SendBuffer[Priority.Medium]).Enqueue(data);
+                        _Connection.SendBuffer[Priority.Medium].Dequeue();
                     }
                     _MediumSentCount++;
 
@@ -1328,12 +1636,12 @@ namespace Meebey.SmartIrc4net
             {
                 if ((_BelowMediumCount > 0) &&
                     (_BelowMediumSentCount < _BelowMediumThresholdCount)) {
-                    string data = (string)((Queue)_Connection._SendBuffer[Priority.BelowMedium]).Dequeue();
-                    if (_Connection._WriteLine(data) == false) {
+                    string data = _Connection.SendBuffer[Priority.BelowMedium].Peek();
+                    if (!_Connection.BaseWrite(data)) {
 #if LOG4NET
                         Logger.Queue.Warn("Sending data was not sucessful, data is requeued!");
 #endif
-                        ((Queue)_Connection._SendBuffer[Priority.BelowMedium]).Enqueue(data);
+                        _Connection.SendBuffer[Priority.BelowMedium].Dequeue();
                     }
                     _BelowMediumSentCount++;
 
@@ -1355,12 +1663,12 @@ namespace Meebey.SmartIrc4net
                         return true;
                     }
 
-                    string data = (string)((Queue)_Connection._SendBuffer[Priority.Low]).Dequeue();
-                    if (_Connection._WriteLine(data) == false) {
+                    string data = _Connection.SendBuffer[Priority.Low].Peek();
+                    if (!_Connection.BaseWrite(data)) {
 #if LOG4NET
                         Logger.Queue.Warn("Sending data was not sucessful, data is requeued!");
 #endif
-                        ((Queue)_Connection._SendBuffer[Priority.Low]).Enqueue(data);
+                        _Connection.SendBuffer[Priority.Low].Dequeue();
                     }
 
                     if (_LowCount > 1) {
@@ -1370,6 +1678,7 @@ namespace Meebey.SmartIrc4net
 
                 return true;
             }
+
             // END OF WARNING, below this you can read/change again ;)
 #endregion
         }
@@ -1469,5 +1778,6 @@ namespace Meebey.SmartIrc4net
                 }
             }
         }
+#endif
     }
 }
