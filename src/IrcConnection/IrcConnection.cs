@@ -446,6 +446,14 @@ namespace Meebey.SmartIrc4net
         private ITimerWatcher SendMessageWatcher { get; set; }
         private ITcpSocket    Socket             { get; set; }
 
+        private bool IgnorePong { get; set; }
+
+        private ITimerWatcher PingTimeoutWatcher { get; set; }
+
+        public event EventHandler           OnPingTimeout;
+
+        public ulong PingTimeoutCount { get; protected set; }
+
         /// <summary>
         /// To prevent flooding the IRC server, it's required to delay each
         /// message, given in milliseconds.
@@ -802,6 +810,66 @@ namespace Meebey.SmartIrc4net
 #endif
         }
 
+        public void StartPingTimeoutWatcher()
+        {
+            PingTimeoutWatcher = Context.CreateTimerWatcher(TimeSpan.FromMilliseconds(_PingTimeout), Timeout);
+        }
+
+        public void StopPingTimeoutWatcher()
+        {
+            if (PingTimeoutWatcher != null) {
+                if (PingTimeoutWatcher.IsRunning) {
+                    PingTimeoutWatcher.Stop();
+                }
+                PingTimeoutWatcher = null;
+            }
+        }
+
+        private void Timeout()
+        {
+            PingTimeoutCount++;
+
+            if (OnPingTimeout != null) {
+                OnPingTimeout(this, EventArgs.Empty);
+            }
+
+            SendPing();
+        }
+
+        private void SendPing()
+        {
+            IgnorePong = false;
+            WriteLine(Rfc2812.Ping(Address), Priority.Critical);
+            _LastPingSent = DateTime.Now;
+            StartPingTimeoutWatcher();
+        }
+
+        private void OnWelcome()
+        {
+            SendPing();
+        }
+
+        private void OnPong()
+        {
+            if (IgnorePong) {
+                return;
+            }
+
+            StopPingTimeoutWatcher();
+
+            IgnorePong = true;
+
+            _LastPongReceived = DateTime.Now;
+            _Lag = _LastPongReceived - _LastPingSent;
+
+            TimeSpan pingInterval = TimeSpan.FromMilliseconds(PingInterval);
+            TimeSpan nextPing = TimeSpan.Zero;
+            if (_Lag < pingInterval) {
+                nextPing = pingInterval - _Lag;
+            }
+
+            Context.CreateTimerWatcher(nextPing, SendPing);
+        }
 #else
 
         /// <summary>
@@ -1208,6 +1276,14 @@ namespace Meebey.SmartIrc4net
                 SendBuffer[priority].Enqueue(data);
             }
         }
+
+        private void OnWelcome()
+        {
+        }
+
+        private void OnPong()
+        {
+        }
 #endif
         
 #if LOG4NET
@@ -1289,6 +1365,7 @@ namespace Meebey.SmartIrc4net
 #if LOG4NET
                             Logger.Connection.Info("logged in");
 #endif
+                            OnWelcome();
                             break;
                     }
                 } else {
@@ -1301,6 +1378,7 @@ namespace Meebey.SmartIrc4net
 #if LOG4NET
                             Logger.Connection.Debug("PONG received, took: " + _Lag.TotalMilliseconds + " ms");
 #endif
+                            OnPong();
                             break;
                     }
                 }
