@@ -1204,7 +1204,9 @@ namespace Meebey.SmartIrc4net
 
         private void EnqueueData(string data, Priority priority)
         {
-            SendBuffer[priority].Enqueue(data);
+            lock ((SendBuffer as ICollection).SyncRoot) {
+                SendBuffer[priority].Enqueue(data);
+            }
         }
 #endif
         
@@ -1539,7 +1541,7 @@ namespace Meebey.SmartIrc4net
             // WARNING: complex scheduler, don't even think about changing it!
             private void _CheckBuffer()
             {
-                lock (_Connection.SendBuffer) {
+                lock ((_Connection.SendBuffer as ICollection).SyncRoot) {
                     // only send data if we are succefully registered on the IRC network
                     if (!_Connection._IsRegistered) {
                         return;
