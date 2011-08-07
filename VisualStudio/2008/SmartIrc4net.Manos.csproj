@@ -169,8 +169,12 @@
       <Link>Logger.cs</Link>
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="IrcConnection\CallbackCollection.cs" />
-    <Compile Include="IrcConnection\ByteBufferCollection.cs" />
+    <Compile Include="..\..\src\IrcConnection\ByteBufferCollection.cs">
+      <Link>IrcConnection\ByteBufferCollection.cs</Link>
+    </Compile>
+    <Compile Include="..\..\src\IrcConnection\CallbackCollection.cs">
+      <Link>IrcConnection\CallbackCollection.cs</Link>
+    </Compile>
   </ItemGroup>
   <ItemGroup>
     <BootstrapperPackage Include="Microsoft.Net.Framework.2.0">
